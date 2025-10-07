@@ -1,0 +1,24 @@
+{
+  "name": "pcc-auto-registration",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kenpott/PCC-Auto-Registration.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kenpott/PCC-Auto-Registration/issues"
+  },
+  "homepage": "https://github.com/kenpott/PCC-Auto-Registration#readme",
+  "description": "",
+  "dependencies": {
+    "patchright": "^1.55.3"
+  }
+}
