@@ -1,6 +1,6 @@
 # PCC Auto Registration
 
-Automate course registration at Portland Community College.
+Automate course registration at Pasadena Community College.
 
 ## Overview
 
