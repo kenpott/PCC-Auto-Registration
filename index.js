@@ -1,152 +1,238 @@
 import { chromium } from "patchright";
+import path from "path";
+import fs from "fs";
 
-// CONFIG //
-const u = "";
-const p = "";
-const TERM = 202610; // 202610 = Winter 2026
-/**
- *  10 - Winter
- *  20 - 
- *  30 - 
- *  70 - Fall
- *  75 - 
- */
-const CRNS = ["10924", "10195"];
-const registrationDate = new Date("2025-11-07T08:00:00-07:00");
-const TRACKING_INTERVAL = 60000; // 1min
-let cacheClasses = {};
-let page;
+const TRACKING_INTERVAL = 5; // minutes (ensure its less than 15-20 minutes so it doesn't timeout)
+
+// does support multiple users
+const accounts = {
+  user1: {
+    u: "",
+    p: "",
+    term: "",
+    crns: [],
+    registrationDate: null, // new Date("2025-11-07T08:00:00-07:00")
+  },
+};
+
+const webhookURL = "https://discord.com/api/webhooks/"; // if you don't want to send a webhook just leave it blank ""
+
+let cachedClasses = {};
 
 async function sendWebhook(message) {
-  await fetch(
-    "https://discord.com/api/webhooks/1424650408130908190/NXxHZEh99w-IalogVjPAV7osBhoTJXj6Dw3mJLNBDzwDw7u1bKPmIaMhk2HSi8-5wyWI",
-    {
+  if (!webhookURL) return;
+  try {
+    const payload = {
+      username: "Kewl",
+      content: `<@489547245021298700>`,
+      embeds: [
+        {
+          description: message,
+        },
+      ],
+    };
+
+    const response = await fetch(webhookURL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ content: `<@489547245021298700>\n${message}` }),
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      console.error(`Webhook failed with status: ${response.status}`);
     }
-  );
+  } catch (err) {
+    console.error("Error sending webhook:", err.message);
+  }
 }
 
-async function login() {
-  console.log("[Kewl] Logging in...");
-  await page.fill('input[name="usernameUserInput"]', u);
-  await page.fill('input[name="password"]', p);
+async function sendClassInfo(course) {
+  try {
+    const seatsTaken = Number(course.maxEnrl) - Number(course.seatsAvail);
+
+    const payload = {
+      username: "Kewl",
+      content: `<@489547245021298700>`,
+      embeds: [
+        {
+          title: `${course.subjCode} ${course.courseNumbDisplay} - ${course.courseTitle}`,
+          description: course.sectionNote.replace(/<\/?[^>]+(>|$)/g, ""),
+          fields: [
+            { name: "CRN", value: course.crn, inline: true },
+            { name: "Professor", value: course.pfaName || "TBA", inline: true },
+            { name: "Seats Taken", value: `${seatsTaken}`, inline: true },
+            {
+              name: "Seats Available",
+              value: `${course.seatsAvail}`,
+              inline: true,
+            },
+            { name: "Total Seats", value: `${course.maxEnrl}`, inline: true },
+            {
+              name: "Waitlist Available",
+              value: `${course.waitAvail}`,
+              inline: true,
+            },
+            { name: "Term", value: course.termCode, inline: true },
+            {
+              name: "Schedule",
+              value: `${course.beginTime}-${course.endTime} (${course.schdDesc})`,
+              inline: true,
+            },
+            {
+              name: "Room",
+              value: `${course.bldgDesc} ${course.roomCode}`,
+              inline: true,
+            },
+          ],
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    const response = await fetch(webhookURL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      console.error(`Webhook failed with status: ${response.status}`);
+    }
+  } catch (err) {
+    console.error("Error sending class info webhook:", err.message);
+  }
+}
+
+async function login(page, user) {
+  console.log(`[INFO][${user.u}] Logging in...`);
+  await page.fill('input[name="usernameUserInput"]', user.u);
+  await page.fill('input[name="password"]', user.p);
   await page.click('button[type="submit"]');
-  console.log("[Kewl] Logged in successfully!");
-  return true;
+  await page.waitForTimeout(2000);
+  console.log(`[INFO][${user.u}] Logged in`);
 }
 
-async function selectTerm(term = TERM) {
-  console.log("[Kewl] Selecting term...");
+async function selectTerm(page, user) {
+  console.log(`[${user.u}] Selecting term ${user.term}...`);
   await page.goto(
     "https://ssb-prod.ec.pasadena.edu/ssomanager/saml/login?relayState=/c/auth/SSB?pkg=bwskfreg.P_AltPin"
   );
   await page.evaluate(async (term) => {
     await fetch("https://ssb-prod.ec.pasadena.edu/PROD/bwskfreg.P_AltPin", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ term_in: term }),
       credentials: "include",
     });
-  }, term);
+  }, user.term);
   await page.reload();
-  console.log("[Kewl] Term selected!");
+  console.log(`[${user.u}] Term selected`);
 }
 
-async function addClasses(crns = CRNS) {
-  console.log("[Kewl] Adding classes...");
-  for (let i = 0; i < crns.length; i++) {
+async function addClasses(page, user) {
+  for (let i = 0; i < user.crns.length; i++) {
     const crnInput = page.locator(`#crn_id${i + 1}`);
-    await crnInput.fill(String(crns[i]));
+    await crnInput.fill(String(user.crns[i]));
   }
-  await Promise.all([
-    page.waitForNavigation({ waitUntil: "networkidle" }),
-    page.locator('input[value="Submit Changes"]').click(),
-  ]);
 
-  console.log("[Kewl] Classes submitted!");
+  await page.waitForNavigation({ waitUntil: "networkidle" }),
+    await page.locator('input[value="Submit Changes"]').click(),
+    await sendWebhook(
+      `[${user.u}] Attempted to add classes: ${user.crns.join(", ")}`
+    );
+  console.log(`[${user.u}] Classes submitted`);
+  // send a ss
 }
 
-async function trackClasses(crns = CRNS) {
-  console.log("[Kewl] Checking classes...");
+async function init(key, user) {
+  const profilePath = path.resolve(`./profiles/${key}`);
+  fs.mkdirSync(profilePath, { recursive: true });
 
-  const response = await fetch(
-    "https://prod-apiweb.pasadena.edu/api/classSchedule/202610"
-  );
-  const data = await response.json();
-  const matches = data.filter((c) => crns.includes(c.crn));
+  cachedClasses[user.u] = {};
 
-  for (const match of matches) {
-    const seatsAvail = Number(match.seatsAvail);
-    const cached = cacheClasses[match.crn];
-
-    if (!cached) {
-      cacheClasses[match.crn] = { ...match, seatsAvail };
-      continue;
-    }
-
-    const cachedSeats = Number(cached.seatsAvail);
-
-    if (cachedSeats !== seatsAvail) {
-      console.log(
-        `[Kewl] Slot change for ${match.courseTitle}\n` +
-          `[Kewl] Seats Available: ${cachedSeats} → ${seatsAvail}`
-      );
-
-      await sendWebhook(
-        `[Kewl] Slot change for ${match.courseTitle}\n` +
-          `[Kewl] Seats Available: ${cachedSeats} → ${seatsAvail}`
-      );
-    }
-
-    if (seatsAvail > 0 && new Date() >= registrationDate) {
-      console.log(`[Kewl] Attempting to add ${match.courseTitle}...`);
-      await sendWebhook(`[Kewl] Attempting to add ${match.courseTitle}...`);
-      await main();
-    }
-
-    cacheClasses[match.crn] = { ...match, seatsAvail };
-  }
-}
-
-async function main() {
-  const browser = await chromium.launchPersistentContext("...", {
+  const browser = await chromium.launchPersistentContext(profilePath, {
     channel: "chrome",
     headless: false,
     viewport: null,
   });
-  page = await browser.newPage();
 
+  const page = await browser.newPage();
   await page.goto("https://lancerpoint.pasadena.edu");
-  console.log("Page title:", await page.title());
-  if ((await page.title()) === "Pasadena City College Login") {
-    await login();
-  }
+
+  const title = await page.title();
+  if (title.includes("Login")) await login(page, user);
+
   await page.waitForURL("https://experience.elluciancloud.com/paccd/**", {
-    timeout: 5000,
+    timeout: 15000,
+    waitUntil: "domcontentloaded",
   });
-  await selectTerm();
-  await addClasses();
+
+  await selectTerm(page, user);
+
+  setInterval(async () => {
+    try {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      console.log(`[${user.u}] Session refreshed`);
+    } catch (e) {
+      console.warn(`[${user.u}] Refresh failed: ${e.message}`);
+    }
+  }, 60000); // prevents session timeout
+
+  while (true) {
+    try {
+      const response = await fetch(
+        `https://prod-apiweb.pasadena.edu/api/classSchedule/${user.term}`
+      );
+      const data = await response.json();
+      const matches = data.filter((course) => user.crns.includes(course.crn));
+
+      for (const course of matches) {
+        const cached = cachedClasses[user.u][course.crn];
+
+        if (!cached) {
+          cachedClasses[user.u][course.crn] = { ...course };
+          console.log(
+            `[${user.u}] ${course.courseTitle}: ${course.seatsAvail} seats available`
+          );
+          continue;
+        }
+
+        const cachedSeatsAvail = cached.seatsAvail;
+        const seatsAvail = Number(course.seatsAvail);
+
+        console.log("Cache Seats: ", cachedSeatsAvail);
+
+        if (cachedSeatsAvail !== seatsAvail) {
+          console.log(
+            `[${user.u}] Slot change for ${course.courseTitle}: ${seatsAvail} seats available`
+          );
+          await sendClassInfo(course);
+        }
+
+        if (seatsAvail > 0 && new Date() >= user.registrationDate) {
+          console.log(`[${user.u}] Attempting to add ${course.courseTitle}`);
+          await sendClassInfo(course);
+          await page.reload({ waitUntil: "domcontentloaded" });
+          await addClasses(page, user);
+        }
+        cachedClasses[user.u][course.crn] = { ...course, seatsAvail };
+      }
+    } catch (e) {
+      console.error(`[${user.u}] Tracking error: ${e.message}`);
+    }
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, TRACKING_INTERVAL * 60000)
+    );
+  }
 }
 
 (async () => {
-  await sendWebhook("[Kewl] Starting up...");
-  while (true) {
-    console.log("[Kewl] Initiating...");
-    if (new Date() >= registrationDate) {
-      console.log(
-        `[Kewl] Registration date met (${registrationDate.toLocaleString()})`
-      );
-      await sendWebhook(
-        `[Kewl] Registration date met (${registrationDate.toLocaleString()})`
-      );
-    }
-    await trackClasses();
-    await new Promise((r) => setTimeout(r, TRACKING_INTERVAL));
-  }
+  console.log(`Initializing script...`);
+  await Promise.all(
+    Object.entries(accounts).map(([key, user]) => init(key, user))
+  );
+  await new Promise(() => {});
 })();
