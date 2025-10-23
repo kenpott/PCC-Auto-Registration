@@ -1,21 +1,7 @@
 import { chromium } from "patchright";
 import path from "path";
 import fs from "fs";
-
-const TRACKING_INTERVAL = 5; // minutes (ensure its less than 15-20 minutes so it doesn't timeout)
-
-// does support multiple users
-const accounts = {
-  user1: {
-    u: "",
-    p: "",
-    term: "",
-    crns: [],
-    registrationDate: null, // new Date("2025-11-07T08:00:00-07:00")
-  },
-};
-
-const webhookURL = "https://discord.com/api/webhooks/"; // if you don't want to send a webhook just leave it blank ""
+import { accounts, TRACKING_INTERVAL, webhookURL } from "./config.js";
 
 let cachedClasses = {};
 
