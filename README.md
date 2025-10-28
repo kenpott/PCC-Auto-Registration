@@ -57,29 +57,8 @@ This tool automatically registers for PCC courses at your specified registration
    npm start
 ```
 
-## Configuration
-
-### Example Configuration
-```javascript
-const accounts = {
-  johnDoe: {
-    u: "jdoe123",
-    p: "securePassword123",
-    term: "202503",
-    crns: [12345, 67890, 11111],
-    registrationDate: new Date("2025-11-07T08:00:00-07:00"),
-  },
-};
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit issues or pull requests.
-
 ## License
 
 This project is licensed under the MIT License
 
 ---
-
-**Disclaimer**: This tool is for educational purposes. Users are responsible for ensuring their use complies with PCC's policies and terms of service.
